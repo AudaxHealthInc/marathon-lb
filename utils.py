@@ -157,6 +157,9 @@ class CurlHttpEventStream(object):
         self.curl.setopt(pycurl.URL, url)
         self.curl.setopt(pycurl.ENCODING, 'gzip')
         self.curl.setopt(pycurl.CONNECTTIMEOUT, 10)
+        self.curl.setopt(pycurl.TCP_KEEPALIVE, 1)
+        self.curl.setopt(pycurl.TCP_KEEPIDLE, 15)
+        self.curl.setopt(pycurl.TCP_KEEPINTVL, 5)
         self.curl.setopt(pycurl.WRITEDATA, self.received_buffer)
         if auth and type(auth) is DCOSAuth:
             auth.refresh_auth_header()
