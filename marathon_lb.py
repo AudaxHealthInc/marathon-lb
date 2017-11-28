@@ -162,6 +162,7 @@ class Marathon(object):
         self.__auth = auth
         self.__cycle_hosts = cycle(self.__hosts)
         self.__verify = False
+        self.__session = requests.Session()
         if ca_cert:
             self.__verify = ca_cert
 
@@ -172,7 +173,7 @@ class Marathon(object):
             for path_elem in path:
                 path_str = path_str + "/" + path_elem
 
-            response = requests.request(
+            response = self.__session.request(
                 method,
                 path_str,
                 auth=auth,
