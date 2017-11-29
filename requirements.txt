@@ -1,4 +1,5 @@
 cryptography
+datadog
 PyJWT==1.4.0
 pycurl
 python-dateutil

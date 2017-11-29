@@ -34,6 +34,7 @@ import threading
 import time
 import traceback
 import datetime
+import datadog
 from itertools import cycle
 from operator import attrgetter
 from shutil import move
@@ -154,7 +155,7 @@ class MarathonApp(object):
 
 
 class Marathon(object):
-    def __init__(self, hosts, health_check, strict_mode, auth, ca_cert=None):
+    def __init__(self, hosts, health_check, strict_mode, auth, ca_cert=None, datadog_stats=datadog_stats):
         # TODO(cmaloney): Support getting master list from zookeeper
         self.__hosts = hosts
         self.__health_check = health_check
@@ -162,6 +163,7 @@ class Marathon(object):
         self.__auth = auth
         self.__cycle_hosts = cycle(self.__hosts)
         self.__verify = False
+        self.__datadog_stats = datadog_stats
         if ca_cert:
             self.__verify = ca_cert
 
@@ -1455,7 +1457,7 @@ def regenerate_config(apps, config_file, groups, bind_http_https,
 class MarathonEventProcessor(object):
 
     def __init__(self, marathon, config_file, groups,
-                 bind_http_https, ssl_certs, haproxy_map):
+                 bind_http_https, ssl_certs, haproxy_map, datadog_stats):
         self.__marathon = marathon
         # appId -> MarathonApp
         self.__apps = dict()
@@ -1469,6 +1471,7 @@ class MarathonEventProcessor(object):
         self.__pending_reset = False
         self.__pending_reload = False
         self.__haproxy_map = haproxy_map
+        self.__datadog_stats = datadog_stats
 
         self.relevant_events = ('api_post_event',
                                 'health_status_changed_event',
@@ -1725,6 +1728,21 @@ if __name__ == '__main__':
     # Setup logging
     setup_logging(logger, args.syslog_socket, args.log_format, args.log_level)
 
+    # Set up datadog reporting
+    # API keys passed in through environment variables
+    datadog.initialize()
+    datadog.api.Metadata.update(metric_name='marathonlb.marathon.bytes_received',
+                                description='How many bytes marathon-lb pulls from the Marathon API',
+                                short_name='bytes received from Marathon',
+                                type='rate',
+                                unit='byte',
+                                per_unit='second')
+    datadog_stats = datadog.ThreadStats(constant_tags=[
+        'environment:{}'.format(os.environ.get('ENVIRONMENT')),
+        'service:{}'.format(os.environ.get('SERVICE'))
+    ])
+    datadog_stats.start()
+
     # initialize health check LRU cache
     if args.health_check:
         healthCheckResultCache = LRUCache(args.lru_cache_capacity)
@@ -1735,7 +1753,8 @@ if __name__ == '__main__':
                         args.health_check,
                         args.strict_mode,
                         get_marathon_auth_params(args),
-                        args.marathon_ca_cert)
+                        args.marathon_ca_cert,
+                        datadog_stats=datadog_stats)
 
     # If we're going to be handling events, set up the event processor and
     # hook it up to the process signals.
@@ -1745,7 +1764,8 @@ if __name__ == '__main__':
                                            args.group,
                                            not args.dont_bind_http_https,
                                            args.ssl_certs,
-                                           args.haproxy_map)
+                                           args.haproxy_map,
+                                           datadog_stats=datadog_stats)
         signal.signal(signal.SIGHUP, processor.handle_signal)
         signal.signal(signal.SIGUSR1, processor.handle_signal)
         backoff = 3
