@@ -197,6 +197,9 @@ class Marathon(object):
                 response.reason,
                 response.json()['message'])
 
+        self.__datadog_stats.increment(metric_name='marathonlb.marathon_api.api_requests')
+        self.__datadog_stats.increment(metric_name='marathonlb.marathon_api.bytes_received',
+                                       value=len(response.content))
         return response
 
     def api_req(self, method, path, **kwargs):
@@ -1530,8 +1533,11 @@ class MarathonEventProcessor(object):
                               self.__templater,
                               self.__haproxy_map)
 
-            logger.debug("updating tasks finished, took %s seconds",
-                         time.time() - start_time)
+            completion_time_seconds = time.time() - start_time
+            logger.debug("updating tasks finished, took %s seconds", completion_time_seconds)
+            self.__datadog_stats.increment(metric_name='marathonlb.config_regenerated')
+            self.__datadog_stats.timing(metric_name='marathonlb.time_to_regenerate_config',
+                                        value=completion_time_seconds)
         except requests.exceptions.ConnectionError as e:
             logger.error("Connection error({0}): {1}".format(
                 e.errno, e.strerror))
